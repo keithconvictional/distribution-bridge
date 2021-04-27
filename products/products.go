@@ -244,3 +244,35 @@ func updateProductOnAPI(apiKey string, product Product) error {
 	}
 	return nil
 }
+
+// Buyer account calling a seller endpoint (This should be fixed)
+func GetIDOfVariantBySellerVariantCode(apiKey string, sellerVariantCode string) (string, error) {
+	page := 0
+	found := false
+	for found {
+		resp, err := http.GetRequest("/products", page, apiKey)
+		if err != nil {
+			return "", err
+		}
+		var products []Product
+		err = json.Unmarshal(resp, &products)
+		if err != nil {
+			return "", err
+		}
+
+		if len(products) == 0 {
+			found = true
+		}
+
+		for _, product := range products {
+			for _, variant := range product.Variants {
+				if variant.Code == sellerVariantCode {
+					return variant.ID, nil
+				}
+			}
+		}
+
+		page++
+	}
+	return "", errors.New(fmt.Sprintf("ID of variant not found using variantID/Code (%s)", sellerVariantCode))
+}

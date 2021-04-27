@@ -1,8 +1,57 @@
 package orders
 
-import "time"
+import (
+	"time"
+)
 
 type Order struct {
+	ID               string `json:"_id"`
+	BuyerOrderCode   string `json:"buyerOrderCode"`
+	SellerOrderCode  string `json:"sellerOrderCode"`
+	BuyerCompanyID   string `json:"buyerCompanyId"`
+	SellerCompanyID  string `json:"sellerCompanyId"`
+	BuyerEmail       string `json:"buyerEmail"`
+	Currency         string `json:"currency"`
+	InvoiceID        string `json:"invoiceId"`
+	Note             string `json:"note"`
+	HasCancellations bool   `json:"hasCancellations"`
+	ShippingAddress  struct {
+		Name       string `json:"name"`
+		AddressOne string `json:"addressOne"`
+		AddressTwo string `json:"addressTwo"`
+		City       string `json:"city"`
+		State      string `json:"state"`
+		Country    string `json:"country"`
+		Zip        string `json:"zip"`
+		Company    string `json:"company"`
+	} `json:"shippingAddress"`
+	FillTime float64 `json:"fillTime"`
+	ShipTime float64 `json:"shipTime"`
+	Custom   []struct {
+		Key   string `json:"key"`
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	} `json:"custom"`
+	Items []struct {
+		ID                string    `json:"_id"`
+		SellerVariantCode string    `json:"sellerVariantCode"`
+		Quantity          int       `json:"quantity"`
+		Cancelled         bool      `json:"cancelled"`
+		CancelledReason   string    `json:"cancelledReason"`
+		CancelledDate     time.Time `json:"cancelledDate"`
+	} `json:"items"`
+	Created     time.Time `json:"created"`
+	Updated     time.Time `json:"updated"`
+	Posted      bool      `json:"posted"`
+	PostedDate  time.Time `json:"postedDate"`
+	Shipped     bool      `json:"shipped"`
+	ShippedDate time.Time `json:"shippedDate"`
+	Billed      bool      `json:"billed"`
+	BilledDate  time.Time `json:"billedDate"`
+}
+
+
+type BuyerOrder struct {
 	ID             string    `json:"id"`
 	BuyerReference string    `json:"buyerReference"`
 	OrderedDate    time.Time `json:"orderedDate"`
@@ -18,15 +67,7 @@ type Order struct {
 		Zip        string `json:"zip"`
 		Company    string `json:"company"`
 	} `json:"address"`
-	Items []struct {
-		ID                string  `json:"id"`
-		VariantID         string  `json:"variantId"`
-		BuyerReference    string  `json:"buyerReference"`
-		SellerOrderID     string  `json:"sellerOrderId"`
-		SellerOrderItemID string  `json:"sellerOrderItemId"`
-		Quantity          int     `json:"quantity"`
-		RetailPrice       float64 `json:"retailPrice"`
-	} `json:"items"`
+	Items []BuyerItem `json:"items"`
 	Note         string `json:"note"`
 	SellerOrders []struct {
 		ID              string    `json:"id"`
@@ -79,7 +120,7 @@ type Order struct {
 			} `json:"items"`
 		} `json:"fulfillments"`
 	} `json:"sellerOrders"`
-	Metafields struct {
+	Metafields *struct {
 		AdditionalProp struct {
 			AdditionalProp struct {
 				Value       string    `json:"value"`
@@ -88,4 +129,14 @@ type Order struct {
 			} `json:"additionalProp"`
 		} `json:"additionalProp"`
 	} `json:"metafields"`
+}
+
+type BuyerItem struct {
+	ID                string  `json:"id"`
+	VariantID         string  `json:"variantId"`
+	BuyerReference    string  `json:"buyerReference"`
+	SellerOrderID     string  `json:"sellerOrderId"`
+	SellerOrderItemID string  `json:"sellerOrderItemId"`
+	Quantity          int     `json:"quantity"`
+	RetailPrice       float64 `json:"retailPrice"`
 }
