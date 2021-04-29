@@ -249,7 +249,7 @@ func updateProductOnAPI(apiKey string, product Product) error {
 func GetIDOfVariantBySellerVariantCode(apiKey string, sellerVariantCode string) (string, error) {
 	page := 0
 	found := false
-	for found {
+	for !found {
 		resp, err := http.GetRequest("/products", page, apiKey)
 		if err != nil {
 			return "", err
@@ -273,6 +273,7 @@ func GetIDOfVariantBySellerVariantCode(apiKey string, sellerVariantCode string) 
 		}
 
 		page++
+		time.Sleep(time.Second * 1)
 	}
 	return "", errors.New(fmt.Sprintf("ID of variant not found using variantID/Code (%s)", sellerVariantCode))
 }

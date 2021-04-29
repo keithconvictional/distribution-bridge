@@ -48,6 +48,49 @@ type Order struct {
 	ShippedDate time.Time `json:"shippedDate"`
 	Billed      bool      `json:"billed"`
 	BilledDate  time.Time `json:"billedDate"`
+	Fulfillments []Fulfillment `json:"fulfillments"`
+}
+
+type Fulfillment struct {
+	ID                    string   `json:"_id"`
+	BuyerFulfillmentCode  string   `json:"buyerFulfillmentCode"`
+	SellerFulfillmentCode string   `json:"sellerFulfillmentCode"`
+	Carrier               string   `json:"carrier"`
+	TrackingCode          string   `json:"trackingCode"`
+	TrackingUrls          []string `json:"trackingUrls"`
+	Items                 []struct {
+		Quantity          int           `json:"quantity"`
+		ID                string        `json:"_id"`
+		OrderItemID       string        `json:"orderItemId"`
+		BuyerItemCode     string        `json:"buyerItemCode"`
+		SellerItemCode    string        `json:"sellerItemCode"`
+		BuyerVariantCode  string        `json:"buyerVariantCode"`
+		SellerVariantCode string        `json:"sellerVariantCode"`
+		BuyerProductCode  string        `json:"buyerProductCode"`
+		SellerProductCode string        `json:"sellerProductCode"`
+		Type              string        `json:"type"`
+		Title             string        `json:"title"`
+		Sku               string        `json:"sku"`
+		Price             int           `json:"price"`
+		RetailPrice       int           `json:"retailPrice"`
+		Barcode           string        `json:"barcode"`
+		BarcodeType       string        `json:"barcodeType"`
+		Weight            int           `json:"weight"`
+		Custom            []interface{} `json:"custom"`
+	} `json:"items"`
+}
+
+type NewFulfillmentRequestBody struct {
+	Carrier string `json:"carrier"`
+	TrackingCode string `json:"trackingCode"`
+	TrackingURLs []string `json:"trackingUrls"`
+	Items []NewFulfillmentItem `json:"items"`
+}
+
+type NewFulfillmentItem struct {
+	ID int32 `json:"id"`
+	SKU string `json:"sku"`
+	Quantity int32 `json:"quantity"`
 }
 
 

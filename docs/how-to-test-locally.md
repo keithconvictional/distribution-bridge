@@ -166,10 +166,26 @@ curl --location --request POST 'http://localhost:8080/buyer/orders' \
 }'
 ```
 
-The order will be submitted. You should receive an email about your new order. You can see the new order in the retail account under orders. It will take a few minutes for the order to sync from the retailer to your seller account.
+The order will be submitted. You should receive an email about your new order. You can see the new order in the retail account under orders. It will take a few minutes for the order sync from the retailer to your seller account.
 
 You should see the order in your seller account in a few minutes. You will need to run the Distribution Bridge with drop shipping enabled (`DROP_SHIPPING_ENABLED=true`).
 
 ```
 DROP_SHIPPING_ENABLED=true CONVICTIONAL_API_URL=http://localhost:8080 SELLER_API_KEY=224Y0HRj5XXPRk2PTSNWVpE5lm7I1RH7 BUYER_API_KEY=xJehwDSQdRDRzRBan72pEZbKOrQDqiTY go run ./
 ```
+
+This will move the order into your buyer account and the supplier account. The supplier will be notified of a new order.
+
+Now, let's fulfill this order. From your supplier account, open the specific order page. You can see a "Create Fulfillment" button. If your supplier is integrated through a platform, they would handle the fulfillment in their platform. Enter in the carrier, tracking code nad tracking URLs. Hit save.
+
+Your buyer account should have the fulfillment information on their account. Similar to before, just open up the specific order.
+
+Next, it's time for this order to be synced across. Run the bridge:
+
+```
+DROP_SHIPPING_ENABLED=true CONVICTIONAL_API_URL=http://localhost:8080 SELLER_API_KEY=224Y0HRj5XXPRk2PTSNWVpE5lm7I1RH7 BUYER_API_KEY=xJehwDSQdRDRzRBan72pEZbKOrQDqiTY go run ./
+```
+
+It will sync the fulfillments over. On your seller account, you should see the order has a fulfillment.
+
+
