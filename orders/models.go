@@ -39,6 +39,8 @@ type Order struct {
 		Cancelled         bool      `json:"cancelled"`
 		CancelledReason   string    `json:"cancelledReason"`
 		CancelledDate     time.Time `json:"cancelledDate"`
+		Barcode string `json:"barcode"`
+		BarcodeType string `json:"barcodeType"`
 	} `json:"items"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`
@@ -182,4 +184,6 @@ type BuyerItem struct {
 	SellerOrderItemID string  `json:"sellerOrderItemId"`
 	Quantity          int     `json:"quantity"`
 	RetailPrice       float64 `json:"retailPrice"`
+	BarcodeType string `json:"barcodeType"`
+	Barcode string `json:"barcode"`
 }

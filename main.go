@@ -2,27 +2,42 @@ package main
 
 import (
 	"distribution-bridge/env"
+	"distribution-bridge/global"
 	"distribution-bridge/logger"
 	"distribution-bridge/orders"
-	"fmt"
+	"distribution-bridge/products"
+	"github.com/google/uuid"
+	"time"
 )
 
 func main() {
-	fmt.Println("Starting Distribution Bridge...")
+	jobID := uuid.New().String()
+	logger.Info(jobID, global.DomainGeneral, "Starting Distribution Bridge...")
 	// Check for variables
-	if !env.ValidEnvVariables() {
-		logger.Info("Required environment variables are missing")
+	if !env.ValidEnvVariables(jobID) {
+		logger.Info(jobID, global.DomainGeneral, "Required environment variables are missing")
 		return
 	}
 
+	var since *time.Time
+	requestManager := global.RequestManager{}
+
 	// Sync products
-	//products.SyncProducts()
+	productJob := products.Job{
+		ID: jobID,
+		Since: since,
+		RequestManager: &requestManager,
+	}
+	productJob.SyncProducts()
 
 	// Sync orders
-	if env.DropShippingEnabled() {
-		logger.Info("Drop shipping is enabled.")
-		orders.SyncOrders()
+	ordersJob := orders.Job{
+		ID: jobID,
+		Since: since,
+		ProductsJob: productJob,
+		RequestManager: &requestManager,
 	}
+	ordersJob.SyncOrders()
 }
 
 

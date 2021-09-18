@@ -1,18 +1,19 @@
 package env
 
 import (
+	"distribution-bridge/global"
 	"distribution-bridge/logger"
 	"os"
 	"strings"
 )
 
-func ValidEnvVariables() bool {
+func ValidEnvVariables(jobID string) bool {
 	if GetSellerAPIKey() == "" {
-		logger.Info("No SELLER_API_KEY set")
+		logger.Info(jobID, global.DomainGeneral, "No SELLER_API_KEY set")
 		return false
 	}
 	if GetBuyerAPIKey() == "" {
-		logger.Info("No BUYER_API_KEY set")
+		logger.Info(jobID, global.DomainGeneral, "No BUYER_API_KEY set")
 		return false
 	}
 	return true

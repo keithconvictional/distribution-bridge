@@ -1,279 +1,201 @@
 package products
 
 import (
+	"distribution-bridge/alerts"
 	"distribution-bridge/env"
-	"distribution-bridge/http"
+	"distribution-bridge/global"
 	"distribution-bridge/logger"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"time"
 )
 
+type Job struct {
+	ID string
+	Since *time.Time
+	RequestManager *global.RequestManager
+}
 
 
-// Sync products from seller account to buyer account.
-func SyncProducts() {
+// SyncProducts :: Sync products from buyer account to seller account.
+func (j *Job) SyncProducts() {
 	page := 0
 	allProductsFound := false
 	productCount := 0
 	// Fetch all products from seller accounts
 	for !allProductsFound {
-		products, err := getProductsFromAPI(page, env.GetBuyerAPIKey())
+		products, err := j.getProductsFromAPI(page, env.GetBuyerAPIKey(), j.Since) // This doesn't actually filter as of 2021-09-17
 		if err != nil {
-			logger.Error(fmt.Sprintf("failed to get products on page %d", page), err)
+			logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("failed to get products on page %d", page), err)
 			return
 		}
 		productCount = productCount + len(products)
 		if len(products) == 0 {
-			logger.Info(fmt.Sprintf("All products have been found [%d]", productCount))
+			logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("All products have been found [%d]", productCount))
 			allProductsFound = true
 			continue
 		}
+		logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("%d products found (from buyer) on page %d", len(products), page))
 
 		// For each product, it's consider to be new or exist on the buyer account
 		for _, product := range products {
-			sellerProduct, exists, err := getProductFromAPIUsingCode(product.Code, env.GetSellerAPIKey())
-			if err != nil {
-				logger.Error(fmt.Sprintf("failed to get product [%s]", product.ID), err)
-				return
-			}
-
-			// Apply PIM updates (This would be any configured overwrites that have been setup)
-			// Not built :: Ex. Loops through Google sheet and when product code = product.Code then updates with columns for corresponding data. Or PIM provider, we make an outbound call to them and they return the updated product
-
-			if exists {
-				logger.Info(fmt.Sprintf("Product [%s] exists and checking for updates.", product.Code))
-				// Check changes, then update
-				err := productsMatch(product, sellerProduct)
-				if err == nil {
-					logger.Info(fmt.Sprintf("Products match between %s and %s", product.ID, sellerProduct.ID))
-					continue
-				} else {
-					logger.Info(fmt.Sprintf("Products did not match between %s and %s b/c %+v", product.ID, sellerProduct.ID, err))
-					// Temp save seller product ID
-					sellerProductID := sellerProduct.ID
-					sellerProduct = product
-					sellerProduct.ID = sellerProductID
-					// Mark updated product as inactive
-					if env.ProductUpdatesToInActive() {
-						sellerProduct.Active = false
-					}
-					err = updateProductOnAPI(env.GetSellerAPIKey(), sellerProduct)
-					if err != nil {
-						logger.Error(fmt.Sprintf("failed to update the product on seller account (Existing) :: %s", sellerProduct.ID), err)
-					}
-				}
-			} else {
-				logger.Info(fmt.Sprintf("Product [%s] does not exist and creating new instance.", product.Code))
-				// Create new product on buyer account
-				productID, err := createProductOnAPI(product, env.GetSellerAPIKey())
-				if err != nil {
-					logger.Error(fmt.Sprintf("failed to create new product on seller account :: Seller Product ID [%s]", product.ID), err)
-					// Not supported but push error to the seller product
-					return
-				}
-				logger.Info(fmt.Sprintf("New product created on buyer account :: %s --> %s", product.ID, productID))
-
-				// Mark new product as inactive
-				if env.NewProductToInActive() {
-					product.Active = false
-					sellerProduct, _, err = getProductFromAPIUsingCode(product.Code, env.GetSellerAPIKey())
-					if err != nil {
-						logger.Error(fmt.Sprintf("failed to get product for seller [%s]", product.ID), err)
-						return
-					}
-
-					err := updateProductOnAPI(env.GetSellerAPIKey(), sellerProduct)
-					logger.Error(fmt.Sprintf("failed to mark product as inactive on seller account (New) :: %s", sellerProduct.ID), err)
-					// Not supported but push error to the buyer and seller product
-					return
-				}
-			}
-
-			time.Sleep(time.Second * 1) // Max of 4 API calls in this block, so this is bad rate limiting
-		}
-
-		page++
-	}
-}
-
-// productsMatch custom method for comparing two products. IDs will be completely different in both.
-func productsMatch(product Product, productTwo Product) error {
-	// Images
-	if len(product.Images) != len(productTwo.Images) {
-		return errors.New("unequal number of images between both products")
-	}
-	foundSrcs := 0
-	for _, imageFromOne := range product.Images {
-		for _, imageFromTwo := range productTwo.Images {
-			if imageFromOne.Src == imageFromTwo.Src {
-				foundSrcs++
-
-				if imageFromOne.Position != imageFromTwo.Position {
-					return errors.New(fmt.Sprintf("image positions do not match for %s", imageFromOne.Src))
-				}
-				break
-			}
+			j.SyncProduct(product)
+			page++
 		}
 	}
-	if foundSrcs != len(product.Images) {
-		return errors.New(fmt.Sprintf("did not find all matches for all images (Found %d of %d)", foundSrcs, len(product.Images)))
+}
+
+// SyncProduct :: Sync a single product from buyer account to seller account
+func (j *Job) SyncProduct(buyerProduct Product) {
+	// Get the buyer product
+	sellerProduct, exists, err := j.getProductFromAPIUsingCode(buyerProduct.Code, env.GetSellerAPIKey())
+	if err != nil {
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("failed to get product [%s]", buyerProduct.ID), err)
+		return
 	}
 
-	// Variants
-	if len(product.Variants) != len(productTwo.Variants) {
-		return errors.New("unequal number of variants")
+	//fmt.Printf("\n\n\n\n")  // TODO KEITH
+	//fmt.Printf("Buyer Product :: %+v :: %+v\n\n", exists, sellerProduct)  // TODO KEITH
+	//fmt.Printf("Seller Product :: %+v\n", buyerProduct)  // TODO KEITH
+	//fmt.Printf("\n\n\n\n")  // TODO KEITH
+	//
+	//
+
+	// If product exists
+	validationErr := j.ValidateProduct(buyerProduct)
+	if exists && validationErr != nil {
+		// Delete the existing product from the buyer account since it's not valid
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("Invalid seller product [https://app.convictional.com/products/%s] and buyer products [%s] because %s", buyerProduct.ID, sellerProduct.ID, validationErr.Error()), validationErr)
+		alerts.SendAlert(fmt.Sprintf("Invalid seller product [https://app.convictional.com/products/%s] and buyer products [%s] because %s", buyerProduct.ID, sellerProduct.ID, validationErr.Error()))
+		return
+	} else if validationErr != nil {
+		// Delete the existing product from the buyer account since it's not valid
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("Invalid seller product [https://app.convictional.com/products/%s] because %s", buyerProduct.ID, validationErr.Error()), validationErr)
+		alerts.SendAlert(fmt.Sprintf("Invalid seller product [https://app.convictional.com/products/%s] because %s", buyerProduct.ID, validationErr.Error()))
+		return
 	}
-	foundVariants := 0
-	for _, variantOne := range product.Variants {
-		for _, variantTwo := range product.Variants {
-			if variantOne.VariantID == variantTwo.VariantID {
-				foundVariants++
-				if !cmp.Equal(variantOne, variantTwo, cmpopts.IgnoreFields(Variants{}, "ID")) {
-					return errors.New(fmt.Sprintf("variants do not match for %s and %s", variantOne.ID, variantTwo.ID))
-				}
-				break
-			}
+
+	// Apply PIM Updates
+	// TODO
+	logger.Info(j.ID, global.DomainProducts, "Apply to PIM")
+
+	if exists {
+		j.UpdateSellerProductFromBuyerProduct(sellerProduct, buyerProduct)
+		return
+	}
+	j.CreateSellerProductFromBuyerProduct(buyerProduct)
+}
+
+// UpdateSellerProductFromBuyerProduct checks if the product has changed
+func (j *Job) UpdateSellerProductFromBuyerProduct(sellerProduct Product, buyerProduct Product) {
+	logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("Product [%s] exists and checking for updates.", sellerProduct.Code))
+	// Check changes, then update
+	err := productsMatch(sellerProduct, buyerProduct)
+	if err == nil {
+		logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("Products match between %s and %s", buyerProduct.ID, sellerProduct.ID))
+		return
+	}
+	logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("Products did not match between %s and %s b/c %+v", buyerProduct.ID, sellerProduct.ID, err))
+
+	for _, image := range sellerProduct.Images {
+		logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("Delete image [%s] on product [%s]", image.ID, sellerProduct.ID))
+		err = j.deleteProductImages(env.GetSellerAPIKey(), sellerProduct.ID, image.ID)
+		if err != nil {
+			logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("Failed to delete product images [%s]", sellerProduct.ID), err)
+			return
 		}
 	}
-	if foundVariants != len(product.Variants) {
-		return errors.New(fmt.Sprintf("did not find all variants (Found %d of %d)", foundVariants, len(product.Variants)))
+
+	// Temp save seller product ID
+	body := ProductUpdateBody{
+		Title: &buyerProduct.Title,
+		Active: &buyerProduct.Active,
+		BodyHTML: &buyerProduct.BodyHTML,
+		Images: RemoveImagesID(buyerProduct.Images),
+		Tags: &buyerProduct.Tags,
+		Vendor: &buyerProduct.Vendor,
+		Variants: RemoveVariantsIDs(buyerProduct.Variants),
+		Options: RemoveOptionsIDs(buyerProduct.Options),
+		Attributes: &buyerProduct.Attributes,
 	}
 
-	// Options
-	if len(product.Options) != len(productTwo.Options) {
-		return errors.New("unequal number of options")
+	fmt.Printf("body :: %+v\n", body)  // TODO KEITH
+	fmt.Printf("sellerProduct.ID :: %+v\n", sellerProduct.ID)  // TODO KEITH
+
+
+	// Mark updated product as inactive
+	if env.ProductUpdatesToInActive() {
+		active := false
+		body.Active = &active
 	}
-	foundOptions := 0
-	for _, optionOne := range product.Options {
-		for _, optionTwo := range product.Options {
-			if optionOne.Name == optionTwo.Name {
-				foundOptions++
-				if !cmp.Equal(optionOne, optionTwo, cmpopts.IgnoreFields(Options{}, "ID")) {
-					return errors.New(fmt.Sprintf("did not find matching options between %s and %s", optionOne.Name, optionTwo.Name))
-				}
-				break
-			}
+	err = j.updateProductOnAPI(env.GetSellerAPIKey(), sellerProduct.ID, body)
+	if err != nil {
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("failed to update the product on seller account (Existing) :: %s", sellerProduct.ID), err)
+		return
+	}
+
+	// Update images :: Image src fields cannot be updated base on API docs, so all images must be delete then re-added.
+}
+
+func RemoveImagesID(images []Image) *[]Image {
+	for i, _ := range images {
+		images[i].ID = ""
+	}
+	return &images
+}
+
+func RemoveVariantsIDs(variants []Variant) *[]Variant {
+	for i, _ := range variants {
+		variants[i].ID = ""
+	}
+	return &variants
+}
+
+func RemoveOptionsIDs(options []Option) *[]Option {
+	for i, _ := range options {
+		options[i].ID = ""
+	}
+	return &options
+}
+
+// CreateSellerProductFromBuyerProduct creates a new seller product from the buyer product
+func (j *Job) CreateSellerProductFromBuyerProduct(sellerProduct Product) {
+	if err := j.ValidateProduct(sellerProduct); err != nil {
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("Product failed to create because [%s] because [%s]", sellerProduct.ID, err.Error()), err)
+		return
+	}
+	logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("Product [%s] does not exist and creating new instance.", sellerProduct.Code))
+	// Create new product on buyer account
+	productID, err := j.createProductOnAPI(sellerProduct, env.GetSellerAPIKey())
+	if err != nil {
+		logger.Error(j.ID, global.DomainProducts, fmt.Sprintf("failed to create new product on seller account :: Seller Product ID [%s]", sellerProduct.ID), err)
+		// Not supported but push error to the seller product
+		return
+	}
+
+	logger.Info(j.ID, global.DomainProducts, fmt.Sprintf("New product created on seller account :: %s --> %s", sellerProduct.ID, productID))
+
+	// Mark new product as inactive
+	if env.NewProductToInActive() {
+		err = j.updateProductAsInactiveOnAPI(env.GetSellerAPIKey(), productID)
+		if err != nil {
+			logger.Error(j.ID, global.DomainProducts,fmt.Sprintf("failed to mark product as inactive on seller account (New) :: %s", productID), err)
 		}
 	}
-	if foundOptions != len(product.Options) {
-		return errors.New(fmt.Sprintf("did not find all options (Found %d of %d)", foundOptions, len(product.Options)))
-	}
-
-	// All other fields that should match
-	if !cmp.Equal(product, productTwo, cmpopts.IgnoreFields(Product{}, "ID", "Active", "Images", "Variants", "Options", "Created", "Updated", "CompanyObjectID","CompanyID")) {
-		return errors.New("products do not match")
-	}
-
-	return nil
 }
 
-// getProductsFromAPI calls the get products endpoint
-func getProductsFromAPI(page int, apiKey string) ([]Product, error) {
-	resp, err := http.GetRequest("/products", page, apiKey)
-	if err != nil {
-		return []Product{}, err
+// ValidateProduct required data
+func (j *Job) ValidateProduct(product Product) error {
+	if product.Title == "" {
+		return errors.New("error: no title")
 	}
-
-	var response []Product
-	err = json.Unmarshal(resp, &response)
-	if err != nil {
-		return []Product{}, err
-	}
-	return response, nil
-}
-
-func getProductFromAPIUsingCode(code string, apiKey string) (Product, bool, error) {
-	resp, err := http.GetRequest(fmt.Sprintf("/products?productCode=%s", code), 0, apiKey)
-	if err != nil {
-		return Product{}, false, err
-	}
-
-	// Capture 404
-	fmt.Printf("getProductFromAPI :: err :: %+v\n", err)
-
-	var response []Product
-	err = json.Unmarshal(resp, &response)
-	if err != nil {
-		return Product{}, false, err
-	}
-	if len(response) == 0 {
-		return Product{}, false, nil
-	}
-	return response[0], true, nil
-}
-
-func createProductOnAPI(product Product, apiKey string) (string, error) {
-	fmt.Printf("product :: %+v", product)
-	jsonPayload, err := json.Marshal(product)
-	if err != nil {
-		return "", err
-	}
-
-	resp, err := http.PostRequest("/products", apiKey, jsonPayload)
-	if err != nil {
-		return "", err
-	}
-
-	var response Product
-	err = json.Unmarshal(resp, &response)
-	if err != nil {
-		return "", err
-	}
-	return product.ID, nil
-}
-
-func updateProductOnAPI(apiKey string, product Product) error {
-	jsonPayload, err := json.Marshal(product)
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.PutRequest(fmt.Sprintf("/products/%s", product.ID), apiKey, jsonPayload)
-	if err != nil {
-		return err
-	}
-
-	var response Product
-	err = json.Unmarshal(resp, &response)
-	if err != nil {
-		return err
+	for _, variant := range product.Variants {
+		if variant.Barcode == "" {
+			return fmt.Errorf("error: no barcode on %s [%s]", product.Title, product.ID)
+		}
+		if variant.BarcodeType == "" {
+			return fmt.Errorf("no barcode type on %s [%s]", product.Title, product.ID)
+		}
 	}
 	return nil
-}
-
-// Buyer account calling a seller endpoint (This should be fixed)
-func GetIDOfVariantBySellerVariantCode(apiKey string, sellerVariantCode string) (string, error) {
-	page := 0
-	found := false
-	for !found {
-		resp, err := http.GetRequest("/products", page, apiKey)
-		if err != nil {
-			return "", err
-		}
-		var products []Product
-		err = json.Unmarshal(resp, &products)
-		if err != nil {
-			return "", err
-		}
-
-		if len(products) == 0 {
-			found = true
-		}
-
-		for _, product := range products {
-			for _, variant := range product.Variants {
-				if variant.Code == sellerVariantCode {
-					return variant.ID, nil
-				}
-			}
-		}
-
-		page++
-		time.Sleep(time.Second * 1)
-	}
-	return "", errors.New(fmt.Sprintf("ID of variant not found using variantID/Code (%s)", sellerVariantCode))
 }

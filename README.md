@@ -13,3 +13,6 @@ The Distribution Bridge is a open source tool for moving product and/or order in
 | `NEW_PRODUCT_TO_INACTIVE` | Marks new products as inactive. Default: `true` | No |
 | `RENDER_WEBHOOK_URL` | The deployment URL to update your Render instance of the app | No |
 
+## About
+
+

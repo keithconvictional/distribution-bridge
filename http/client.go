@@ -15,14 +15,17 @@ var httpClient = &http.Client{
 	Timeout: time.Second * 10,
 }
 
-func GetRequest(urlPath string, page int, apiKey string) ([]byte, error) {
+func GetRequest(requestID string, domain string, urlPath string, page int, apiKey string, since *time.Time) ([]byte, error) {
 	if !strings.Contains(urlPath, "?") {
 		urlPath += "?"
 	} else {
 		urlPath += "&"
 	}
 	url := fmt.Sprintf("%s%spage=%d&limit=250", env.GetBaseURL(), urlPath, page)
-	logger.Info(fmt.Sprintf("Calling url :: %s\n", url))
+	if since != nil {
+		url += fmt.Sprintf("&updated=%s", since.Format("2006-01-02T15:04:05Z"))
+	}
+	logger.Info(requestID, domain, fmt.Sprintf("Calling url :: %s\n", url))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return []byte{}, err
@@ -46,6 +49,25 @@ func PostRequest(urlPath string, apiKey string, jsonPayload []byte) ([]byte, err
 
 func PatchRequest(urlPath string, apiKey string, jsonPayload []byte) ([]byte, error) {
 	return requestWithBody(urlPath, "PATCH", apiKey, jsonPayload)
+}
+
+func DeleteRequest(urlPath string, apiKey string) ([]byte, error) {
+	url := fmt.Sprintf("%s%s", env.GetBaseURL(), urlPath)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	// Add headers
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", apiKey)
+
+	resp, err := sendRequest(req)
+	if err != nil {
+		return []byte{}, err
+	}
+	return resp, nil
 }
 
 func PutRequest(urlPath string, apiKey string, jsonPayload []byte) ([]byte, error) {
